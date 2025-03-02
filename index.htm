@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<title>Jump Count Game</title>
+
+</head>
+
+<body>
+
+import React, { useState, useEffect, useRef } from "react";
+
+const SkipCountingGame = () => {
+  const rows = 15;
+  const cols = 10;
+  const initialGrid = Array.from({ length: rows }, (_, row) =>
+    Array.from({ length: cols }, (_, col) =>
+      col === 0 || col === cols - 1 ? (row + 1) * (col === 0 ? 1 : 10) : ""
+    )
+  );
+
+  const [grid, setGrid] = useState(initialGrid);
+  const [selected, setSelected] = useState(null);
+  const [timer, setTimer] = useState(0);
+  const [started, setStarted] = useState(false);
+  const [selectedBoxes, setSelectedBoxes] = useState([]);
+  const [goldRows, setGoldRows] = useState(new Set());
+  const [highlightedRows, setHighlightedRows] = useState(new Set());
+  const [correctCells, setCorrectCells] = useState(new Set());
+  const [isInverted, setIsInverted] = useState(false);
+  const inputRefs = useRef({});
+
+  useEffect(() => {
+    if (started) {
+      const interval = setInterval(() => setTimer((t) => t + 1), 1000);
+      return () => clearInterval(interval);
+    }
+  }, [started]);
+
+  useEffect(() => {
+    if (selected && inputRefs.current[`${selected[0]}-${selected[1]}`]) {
+      const input = inputRefs.current[`${selected[0]}-${selected[1]}`];
+      input.focus();
+      setTimeout(() => input.select(), 0);
+    }
+  }, [selected]);
+
+  const formatTime = (time) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = time % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const handleChange = (row, col, value) => {
+    if (!started) setStarted(true);
+    if (col === 0 || col === cols - 1) return;
+    if (!/^[0-9]{0,3}$/.test(value)) return;
+
+    setGrid((prev) => {
+      const newGrid = prev.map((r) => [...r]);
+      newGrid[row][col] = value;
+      return newGrid;
+    });
+
+    setCorrectCells((prev) => {
+      const newSet = new Set(prev);
+      const correctRow = isInverted ? rows - 1 - row : row;
+      if (Number(value) === (correctRow + 1) * (col + 1)) {
+        newSet.add(`${row}-${col}`);
+      } else {
+        newSet.delete(`${row}-${col}`);
+      }
+      return newSet;
+    });
+  };
+
+  const handleKeyDown = (e, row, col) => {
+    if (e.key === "ArrowRight" && col < cols - 1) setSelected([row, col + 1]);
+    if (e.key === "ArrowLeft" && col > 0) setSelected([row, col - 1]);
+    if (e.key === "ArrowDown" && row < rows - 1) setSelected([row + 1, col]);
+    if (e.key === "ArrowUp" && row > 0) setSelected([row - 1, col]);
+    if (e.key === "Enter" && col >= 8 && col < cols - 1 && row < rows - 1) setSelected([row + 1, 1]);
+  };
+
+  const handleDoubleClick = (row, col) => {
+    setSelectedBoxes((prev) => {
+      if (prev.length === 2 || (prev.length === 1 && prev[0][1] !== col)) {
+        return [[row, col]];
+      }
+      const newSelection = [...prev, [row, col]];
+      setGoldRows(new Set(newSelection.map(([r]) => r)));
+      
+      if (newSelection.length === 2 && newSelection[0][1] === 0 && newSelection[1][1] === 0) {
+        setHighlightedRows(new Set(newSelection.map(([r]) => r)));
+      } else {
+        setHighlightedRows(new Set());
+      }
+      
+      return newSelection.length > 2 ? newSelection.slice(1) : newSelection;
+    });
+  };
+
+  const handleInvert = () => {
+    setGrid((prev) => prev.slice().reverse());
+    setCorrectCells((prev) => {
+      const newSet = new Set();
+      prev.forEach((cell) => {
+        const [r, c] = cell.split("-").map(Number);
+        newSet.add(`${rows - 1 - r}-${c}`);
+      });
+      return newSet;
+    });
+    setGoldRows((prev) => {
+      const newSet = new Set();
+      prev.forEach((r) => newSet.add(rows - 1 - r));
+      return newSet;
+    });
+    setHighlightedRows((prev) => {
+      const newSet = new Set();
+      prev.forEach((r) => newSet.add(rows - 1 - r));
+      return newSet;
+    });
+    setIsInverted((prev) => !prev);
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", height: "100vh", paddingTop: "10px" }} onClick={() => { setSelectedBoxes([]); setGoldRows(new Set()); setHighlightedRows(new Set()); }}>
+      <h2>Skip Counting Game</h2>
+      <p>Timer: {formatTime(timer)}</p>
+      <button onClick={handleInvert} style={{ border: "2px solid black", padding: "5px 10px", cursor: "pointer" }}>Invert Table</button>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 50px)`, gap: "2px" }}>
+        {grid.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            const isSelected = selectedBoxes.some(([r, c]) => r === rowIndex && c === colIndex);
+            const isGold = goldRows.has(rowIndex) && colIndex === 0;
+            const isHighlighted = highlightedRows.has(rowIndex) && colIndex !== 0;
+            const isCorrect = correctCells.has(`${rowIndex}-${colIndex}`);
+            const cellKey = `${rowIndex}-${colIndex}`;
+            return (
+              <input key={cellKey} ref={(el) => (inputRefs.current[cellKey] = el)} value={cell} onChange={(e) => handleChange(rowIndex, colIndex, e.target.value)} onKeyDown={(e) => handleKeyDown(e, rowIndex, colIndex)} onClick={(e) => { e.stopPropagation(); setSelected([rowIndex, colIndex]); }} onDoubleClick={() => handleDoubleClick(rowIndex, colIndex)} style={{ width: "50px", height: "30px", textAlign: "center", border: isSelected ? "4px solid blue" : "1px solid black", backgroundColor: isGold ? "gold" : isHighlighted ? "lightyellow" : colIndex === 0 || colIndex === cols - 1 ? "white" : isCorrect ? "lightgreen" : cell !== "" ? "lightcoral" : "white" }} readOnly={colIndex === 0 || colIndex === cols - 1} />
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default SkipCountingGame;
+
+
+</body>
+
+</html>
